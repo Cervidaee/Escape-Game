@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escape Game - Reconnaissance faciale</title>
+    <title>Reconnaissance faciale</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.0.4"></script>
     <style>
@@ -38,7 +38,6 @@
 
         #video-container {
             margin: 20px;
-            display: none;
         }
 
         #video {
@@ -55,17 +54,21 @@
             font-size: 18px;
             color: #333;
         }
+
+        #file-input {
+            display: none;
+        }
     </style>
 </head>
 
 <body>
     <h1>🔍 Scanner les visages</h1>
-    <p>Placez le visage cible devant la caméra ou sélectionnez une photo.</p>
+    <p>La caméra est déjà active. Cliquez sur "Scanner" pour reconnaître le visage.</p>
 
     <!-- Boutons -->
-    <input type="file" id="file-input" accept="image/*" style="display: none;">
+    <input type="file" id="file-input" accept="image/*">
     <button onclick="document.getElementById('file-input').click()">📁 Sélectionner une photo</button>
-    <button onclick="startCamera()">📱 Scanner avec la caméra</button>
+    <button id="scan-button" onclick="scanFace()">🔎 Scanner</button>
 
     <!-- Zone pour la caméra -->
     <div id="video-container">
@@ -74,112 +77,26 @@
     </div>
 
     <!-- Zone de résultat -->
-    <div id="result">Prêt à scanner...</div>
-    <div id="loading">Chargement du modèle de reconnaissance...</div>
+    <div id="result">Caméra en attente...</div>
+    <div id="loading">Analyse en cours...</div>
 
     <script>
-        // ===== VARIABLES GLOBALES =====
+        // Variables globales
         let model;
-        let targetEmbedding;
         const TARGET_IMAGE_URL = "reference/clémentine.jpg";
 
         // ===== INITIALISATION =====
         async function init() {
+            // Charge le modèle MobileNet
             document.getElementById('loading').style.display = 'block';
             model = await mobilenet.load();
-            await loadTargetImage();
             document.getElementById('loading').style.display = 'none';
-            document.getElementById('result').textContent = "Modèle chargé !";
+
+            // Ouvre la caméra automatiquement
+            await startCamera();
         }
 
-        // ===== CHARGEMENT DE L'IMAGE DE RÉFÉRENCE =====
-        async function loadTargetImage() {
-            try {
-                const img = new Image();
-                img.crossOrigin = "Anonymous"; // Important pour éviter les erreurs CORS
-                img.src = TARGET_IMAGE_URL;
-
-                await new Promise((resolve, reject) => {
-                    img.onload = resolve;
-                    img.onerror = () => reject(new Error("Échec du chargement de l'image de référence"));
-                });
-
-                targetEmbedding = await getEmbedding(img);
-                document.getElementById('result').textContent = "Image de référence chargée !";
-            } catch (error) {
-                console.error("Erreur lors du chargement de l'image de référence:", error);
-                document.getElementById('result').textContent = "❌ Erreur: Image de référence introuvable !";
-            }
-        }
-
-        // ===== OBTENTION DE L'EMBEDDING (Vecteur de caractéristiques) =====
-        async function getEmbedding(img) {
-            // Prétraitement de l'image
-            const preprocessedImg = tf.browser.fromPixels(img)
-                .resizeNearestNeighbor([224, 224])
-                .toFloat()
-                .expandDims();
-
-            // Extraction des caractéristiques avec MobileNet
-            const embedding = model.infer(preprocessedImg, true);
-            return embedding;
-        }
-
-        // ===== CALCUL DE SIMILARITÉ COSINUS =====
-        function cosineSimilarity(a, b) {
-            // Produit scalaire
-            const dotProduct = tf.sum(tf.mul(a, b));
-            // Normes des vecteurs
-            const normA = tf.sqrt(tf.sum(tf.square(a)));
-            const normB = tf.sqrt(tf.sum(tf.square(b)));
-            // Similarité cosinus
-            return dotProduct.div(normA.mul(normB));
-        }
-
-        // ===== TRAITEMENT DE L'IMAGE CAPTURÉE =====
-        async function processImage(img) {
-            if (!targetEmbedding) {
-                document.getElementById('result').textContent = "⚠️ Image de référence non chargée !";
-                return;
-            }
-
-            const currentEmbedding = await getEmbedding(img);
-            const similarity = cosineSimilarity(targetEmbedding, currentEmbedding);
-
-            // Convertir le tenseur en valeur JavaScript
-            const similarityValue = await similarity.data();
-
-            // Seuil de similarité (ajuste selon tes besoins)
-            const threshold = 0.8;
-
-            if (similarityValue[0] > threshold) {
-                document.getElementById('result').innerHTML = `
-                    <span style="color: green; font-size: 32px;">✅ CODE 4729</span>
-                    <p style="font-size: 16px;">Similarité: ${(similarityValue[0] * 100).toFixed(2)}%</p>
-                `;
-            } else {
-                document.getElementById('result').innerHTML = `
-                    <span style="color: red; font-size: 32px;">❌ Raté !</span>
-                    <p style="font-size: 16px;">Similarité: ${(similarityValue[0] * 100).toFixed(2)}%</p>
-                `;
-            }
-        }
-
-        // ===== CAPTURE DE LA PHOTO =====
-        async function takePhoto() {
-            const video = document.getElementById('video');
-            const canvas = document.getElementById('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            const img = new Image();
-            img.src = canvas.toDataURL('image/jpeg');
-
-            await new Promise(resolve => { img.onload = resolve; });
-            await processImage(img);
-        }
-
-        // ===== DÉMARRAGE DE LA CAMÉRA =====
+        // ===== OUVRE LA CAMÉRA AUTOMATIQUEMENT =====
         async function startCamera() {
             const video = document.getElementById('video');
             const videoContainer = document.getElementById('video-container');
@@ -188,10 +105,59 @@
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
                 videoContainer.style.display = 'block';
-                document.getElementById('result').textContent = "Caméra activée !";
+                document.getElementById('result').textContent = "Caméra active !";
             } catch (error) {
-                console.error("Erreur lors de l'accès à la caméra:", error);
+                console.error("Erreur caméra:", error);
                 document.getElementById('result').textContent = "❌ Impossible d'accéder à la caméra !";
+            }
+        }
+
+        // ===== TRAITEMENT DE L'IMAGE (SCAN) =====
+        async function scanFace() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Dessine l'image de la caméra sur le canvas
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Charge l'image de référence
+            const referenceImg = new Image();
+            referenceImg.crossOrigin = "anonymous";
+            referenceImg.src = TARGET_IMAGE_URL;
+
+            await new Promise(resolve => { referenceImg.onload = resolve; });
+
+            // Charge l'image de la caméra
+            const currentImg = new Image();
+            currentImg.src = canvas.toDataURL('image/jpeg');
+
+            await new Promise(resolve => { currentImg.onload = resolve; });
+
+            // Compare les deux images
+            const result = await compareImages(referenceImg, currentImg);
+            document.getElementById('result').textContent = result;
+        }
+
+        // ===== FONCTION DE COMPARAISON =====
+        async function compareImages(img1, img2) {
+            // Charge les images dans MobileNet
+            const embedding1 = await model.infer(img1, true);
+            const embedding2 = await model.infer(img2, true);
+
+            // Calcule la similarité cosinus (simplifiée)
+            const dotProduct = tf.sum(tf.mul(embedding1, embedding2)).dataSync()[0];
+            const norm1 = tf.norm(embedding1).dataSync()[0];
+            const norm2 = tf.norm(embedding2).dataSync()[0];
+            const similarity = dotProduct / (norm1 * norm2);
+
+            // Affiche le résultat
+            if (similarity > 0.7) { // Seuil de similarité (à ajuster)
+                return `✅ CODE 4729 (Similarité: ${(similarity * 100).toFixed(1)}%)`;
+            } else {
+                return `❌ Raté ! (Similarité: ${(similarity * 100).toFixed(1)}%)`;
             }
         }
 
@@ -204,10 +170,11 @@
             img.src = URL.createObjectURL(file);
 
             await new Promise(resolve => { img.onload = resolve; });
-            await processImage(img);
+            const result = await compareImages(document.querySelector('#reference-img'), img);
+            document.getElementById('result').textContent = result;
         });
 
-        // ===== INITIALISATION AU CHARGEMENT DE LA PAGE =====
+        // ===== INITIALISATION AU CHARGEMENT =====
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
