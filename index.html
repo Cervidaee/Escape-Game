@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reconnaissance faciale</title>
+    <title>Escape Game - Reconnaissance faciale</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.0.4"></script>
     <style>
@@ -54,20 +54,14 @@
             font-size: 18px;
             color: #333;
         }
-
-        #file-input {
-            display: none;
-        }
     </style>
 </head>
 
 <body>
     <h1>🔍 Scanner les visages</h1>
-    <p>La caméra est déjà active. Cliquez sur "Scanner" pour reconnaître le visage.</p>
+    <p>La caméra arrière est active. Cliquez sur "Scanner" pour reconnaître le visage.</p>
 
-    <!-- Boutons -->
-    <input type="file" id="file-input" accept="image/*">
-    <button onclick="document.getElementById('file-input').click()">📁 Sélectionner une photo</button>
+    <!-- Bouton SCAN UNIQUE -->
     <button id="scan-button" onclick="scanFace()">🔎 Scanner</button>
 
     <!-- Zone pour la caméra -->
@@ -87,25 +81,25 @@
 
         // ===== INITIALISATION =====
         async function init() {
-            // Charge le modèle MobileNet
             document.getElementById('loading').style.display = 'block';
             model = await mobilenet.load();
             document.getElementById('loading').style.display = 'none';
-
-            // Ouvre la caméra automatiquement
             await startCamera();
         }
 
-        // ===== OUVRE LA CAMÉRA AUTOMATIQUEMENT =====
+        // ===== OUVRE LA CAMÉRA ARRIÈRE AUTOMATIQUEMENT =====
         async function startCamera() {
             const video = document.getElementById('video');
             const videoContainer = document.getElementById('video-container');
 
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // Spécifie l'appareil photo arrière (environment = arrière, user = avant)
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" } // 👈 CAMÉRA ARRIÈRE
+                });
                 video.srcObject = stream;
                 videoContainer.style.display = 'block';
-                document.getElementById('result').textContent = "Caméra active !";
+                document.getElementById('result').textContent = "Caméra arrière active !";
             } catch (error) {
                 console.error("Erreur caméra:", error);
                 document.getElementById('result').textContent = "❌ Impossible d'accéder à la caméra !";
@@ -130,22 +124,16 @@
 
             await new Promise(resolve => { referenceImg.onload = resolve; });
 
-            // Charge l'image de la caméra
-            const currentImg = new Image();
-            currentImg.src = canvas.toDataURL('image/jpeg');
-
-            await new Promise(resolve => { currentImg.onload = resolve; });
-
             // Compare les deux images
-            const result = await compareImages(referenceImg, currentImg);
+            const result = await compareImages(referenceImg, canvas);
             document.getElementById('result').textContent = result;
         }
 
         // ===== FONCTION DE COMPARAISON =====
-        async function compareImages(img1, img2) {
+        async function compareImages(img1, img2Canvas) {
             // Charge les images dans MobileNet
             const embedding1 = await model.infer(img1, true);
-            const embedding2 = await model.infer(img2, true);
+            const embedding2 = await model.infer(img2Canvas, true);
 
             // Calcule la similarité cosinus (simplifiée)
             const dotProduct = tf.sum(tf.mul(embedding1, embedding2)).dataSync()[0];
@@ -160,19 +148,6 @@
                 return `❌ Raté ! (Similarité: ${(similarity * 100).toFixed(1)}%)`;
             }
         }
-
-        // ===== GESTION DU FICHIER SÉLECTIONNÉ =====
-        document.getElementById('file-input').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const img = new Image();
-            img.src = URL.createObjectURL(file);
-
-            await new Promise(resolve => { img.onload = resolve; });
-            const result = await compareImages(document.querySelector('#reference-img'), img);
-            document.getElementById('result').textContent = result;
-        });
 
         // ===== INITIALISATION AU CHARGEMENT =====
         document.addEventListener('DOMContentLoaded', init);
