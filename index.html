@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escape Game - Scanner les visages</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+
+        #result {
+            font-size: 24px;
+            margin: 20px;
+            font-weight: bold;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🔍 Trouve la bonne personne</h1>
+
+    <input type="file" id="file-input" accept="image/*" style="display: none;">
+    <button onclick="document.getElementById('file-input').click()">📁 Sélectionner une photo</button>
+    <button onclick="scanImage()">🔍 Scanner la photo</button>
+
+    <div id="result"></div>
+
+    <script>
+        // Liste des photos autorisées (seule Clementine.jpg donne un code)
+        const authorizedPhotos = ["Clementine.jpg"];
+        const codeForClementine = "5653"; // Change ce code si tu veux
+
+        function scanImage() {
+            const fileInput = document.getElementById('file-input');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                document.getElementById('result').innerHTML = "❌ Aucune photo sélectionnée !";
+                return;
+            }
+
+            // Vérifie si le nom du fichier est "Clementine.jpg" (insensible à la casse)
+            if (authorizedPhotos.some(photo => file.name.toLowerCase() === photo.toLowerCase())) {
+                document.getElementById('result').innerHTML = `✅<br>Code : <strong>${codeForClementine}</strong>`;
+            } else {
+                document.getElementById('result').innerHTML = "❌";
+            }
+        }
+    </script>
+</body>
+
+</html>
