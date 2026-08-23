@@ -4,7 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escape Game - Scanner les visages</title>
+    <title>Escape Game - Reconnaissance faciale</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.0.4"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -33,39 +35,180 @@
         button:hover {
             background-color: #45a049;
         }
+
+        #video-container {
+            margin: 20px;
+            display: none;
+        }
+
+        #video {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        #loading {
+            display: none;
+            font-size: 18px;
+            color: #333;
+        }
     </style>
 </head>
 
 <body>
-    <h1>🔍 Trouve la bonne personne</h1>
+    <h1>🔍 Scanner les visages</h1>
+    <p>Placez le visage cible devant la caméra ou sélectionnez une photo.</p>
 
+    <!-- Boutons -->
     <input type="file" id="file-input" accept="image/*" style="display: none;">
     <button onclick="document.getElementById('file-input').click()">📁 Sélectionner une photo</button>
-    <button onclick="scanImage()">🔍 Scanner la photo</button>
+    <button onclick="startCamera()">📱 Scanner avec la caméra</button>
 
-    <div id="result"></div>
+    <!-- Zone pour la caméra -->
+    <div id="video-container">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <!-- Zone de résultat -->
+    <div id="result">Prêt à scanner...</div>
+    <div id="loading">Chargement du modèle de reconnaissance...</div>
 
     <script>
-        // Liste des photos autorisées (seule Clementine.jpg donne un code)
-        const authorizedPhotos = ["Clementine.jpg"];
-        const codeForClementine = "5653"; // Change ce code si tu veux
+        // ===== VARIABLES GLOBALES =====
+        let model;
+        let targetEmbedding;
+        const TARGET_IMAGE_URL = "reference/clémentine.jpg";
 
-        function scanImage() {
-            const fileInput = document.getElementById('file-input');
-            const file = fileInput.files[0];
+        // ===== INITIALISATION =====
+        async function init() {
+            document.getElementById('loading').style.display = 'block';
+            model = await mobilenet.load();
+            await loadTargetImage();
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('result').textContent = "Modèle chargé !";
+        }
 
-            if (!file) {
-                document.getElementById('result').innerHTML = "❌ Aucune photo sélectionnée !";
+        // ===== CHARGEMENT DE L'IMAGE DE RÉFÉRENCE =====
+        async function loadTargetImage() {
+            try {
+                const img = new Image();
+                img.crossOrigin = "Anonymous"; // Important pour éviter les erreurs CORS
+                img.src = TARGET_IMAGE_URL;
+
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = () => reject(new Error("Échec du chargement de l'image de référence"));
+                });
+
+                targetEmbedding = await getEmbedding(img);
+                document.getElementById('result').textContent = "Image de référence chargée !";
+            } catch (error) {
+                console.error("Erreur lors du chargement de l'image de référence:", error);
+                document.getElementById('result').textContent = "❌ Erreur: Image de référence introuvable !";
+            }
+        }
+
+        // ===== OBTENTION DE L'EMBEDDING (Vecteur de caractéristiques) =====
+        async function getEmbedding(img) {
+            // Prétraitement de l'image
+            const preprocessedImg = tf.browser.fromPixels(img)
+                .resizeNearestNeighbor([224, 224])
+                .toFloat()
+                .expandDims();
+
+            // Extraction des caractéristiques avec MobileNet
+            const embedding = model.infer(preprocessedImg, true);
+            return embedding;
+        }
+
+        // ===== CALCUL DE SIMILARITÉ COSINUS =====
+        function cosineSimilarity(a, b) {
+            // Produit scalaire
+            const dotProduct = tf.sum(tf.mul(a, b));
+            // Normes des vecteurs
+            const normA = tf.sqrt(tf.sum(tf.square(a)));
+            const normB = tf.sqrt(tf.sum(tf.square(b)));
+            // Similarité cosinus
+            return dotProduct.div(normA.mul(normB));
+        }
+
+        // ===== TRAITEMENT DE L'IMAGE CAPTURÉE =====
+        async function processImage(img) {
+            if (!targetEmbedding) {
+                document.getElementById('result').textContent = "⚠️ Image de référence non chargée !";
                 return;
             }
 
-            // Vérifie si le nom du fichier est "Clementine.jpg" (insensible à la casse)
-            if (authorizedPhotos.some(photo => file.name.toLowerCase() === photo.toLowerCase())) {
-                document.getElementById('result').innerHTML = `✅<br>Code : <strong>${codeForClementine}</strong>`;
+            const currentEmbedding = await getEmbedding(img);
+            const similarity = cosineSimilarity(targetEmbedding, currentEmbedding);
+
+            // Convertir le tenseur en valeur JavaScript
+            const similarityValue = await similarity.data();
+
+            // Seuil de similarité (ajuste selon tes besoins)
+            const threshold = 0.8;
+
+            if (similarityValue[0] > threshold) {
+                document.getElementById('result').innerHTML = `
+                    <span style="color: green; font-size: 32px;">✅ CODE 4729</span>
+                    <p style="font-size: 16px;">Similarité: ${(similarityValue[0] * 100).toFixed(2)}%</p>
+                `;
             } else {
-                document.getElementById('result').innerHTML = "❌";
+                document.getElementById('result').innerHTML = `
+                    <span style="color: red; font-size: 32px;">❌ Raté !</span>
+                    <p style="font-size: 16px;">Similarité: ${(similarityValue[0] * 100).toFixed(2)}%</p>
+                `;
             }
         }
+
+        // ===== CAPTURE DE LA PHOTO =====
+        async function takePhoto() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const img = new Image();
+            img.src = canvas.toDataURL('image/jpeg');
+
+            await new Promise(resolve => { img.onload = resolve; });
+            await processImage(img);
+        }
+
+        // ===== DÉMARRAGE DE LA CAMÉRA =====
+        async function startCamera() {
+            const video = document.getElementById('video');
+            const videoContainer = document.getElementById('video-container');
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                videoContainer.style.display = 'block';
+                document.getElementById('result').textContent = "Caméra activée !";
+            } catch (error) {
+                console.error("Erreur lors de l'accès à la caméra:", error);
+                document.getElementById('result').textContent = "❌ Impossible d'accéder à la caméra !";
+            }
+        }
+
+        // ===== GESTION DU FICHIER SÉLECTIONNÉ =====
+        document.getElementById('file-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const img = new Image();
+            img.src = URL.createObjectURL(file);
+
+            await new Promise(resolve => { img.onload = resolve; });
+            await processImage(img);
+        });
+
+        // ===== INITIALISATION AU CHARGEMENT DE LA PAGE =====
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 
