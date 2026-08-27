@@ -126,6 +126,7 @@
         // ===== VARIABLES GLOBALES =====
         let model;
         let referenceImage = new Image();
+        let totalErrors = 0; // ← Variable corrigée
         referenceImage.src = "reference/clémentine.jpg";
 
         // ===== INITIALISATION =====
@@ -182,21 +183,21 @@
                 if (similarity > 0.7) {
                     popupResult.textContent = "✅ CODE 4729";
                     popupIcon.textContent = "✔️";
+                    totalErrors = 0; // ← Réinitialisation du compteur
+                    popup.style.display = 'flex';
                 } else {
                     totalErrors++;
                     popupResult.textContent = "❌ Ce visage vous observe… mais ce n’est pas le bon.";
                     popupIcon.textContent = "❌";
 
-                    // Si le nombre total d'erreurs est un multiple de 3
+                    // Affichage du message "Tic tac" tous les 3 erreurs
                     if (totalErrors % 3 === 0) {
                         popupResult.textContent = "⏰ Tic tac, tic tac, l'heure tourne...";
                         popupIcon.textContent = "⏰";
                     }
 
-                    popup.style.display = 'flex';
+                    popup.style.display = 'flex'; // ← Affichage unique
                 }
-
-                popup.style.display = 'flex';
             } catch (err) {
                 console.error("Erreur scan :", err);
                 popupResult.textContent = "⚠️ Erreur technique";
