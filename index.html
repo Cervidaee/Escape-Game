@@ -183,8 +183,17 @@
                     popupResult.textContent = "✅ CODE 4729";
                     popupIcon.textContent = "✔️";
                 } else {
+                    totalErrors++;
                     popupResult.textContent = "❌ Ce visage vous observe… mais ce n’est pas le bon.";
                     popupIcon.textContent = "❌";
+
+                    // Si le nombre total d'erreurs est un multiple de 3
+                    if (totalErrors % 3 === 0) {
+                        popupResult.textContent = "⏰ Tic tac, tic tac, l'heure tourne...";
+                        popupIcon.textContent = "⏰";
+                    }
+
+                    popup.style.display = 'flex';
                 }
 
                 popup.style.display = 'flex';
